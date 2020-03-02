@@ -24,5 +24,6 @@ from . import (
     schedules,
     sql_lab,
     tags,
+    clipwise
 )
 from .log import api as log_api, views
