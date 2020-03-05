@@ -1,4 +1,6 @@
 import json
+import random
+import string
 
 from flask import request
 from flask_appbuilder import expose
@@ -19,7 +21,8 @@ class Clipwise(BaseSupersetView):
         uri = database_data['uri']
         project_name = database_data['project_name']
         database = self.add_database(uri, project_name)
-        permission_view = security_manager.add_permission_view_menu("database_access", database.perm)
+        permission_view = security_manager.add_permission_view_menu(
+            "database_access", database.perm)
         # adding a new database we always want to force refresh schema list
         for schema in database.get_all_schema_names():
             security_manager.add_permission_view_menu(
@@ -33,12 +36,16 @@ class Clipwise(BaseSupersetView):
     @csrf.exempt
     @expose("/user/add", methods=["POST"])
     def save(self):
+        response = {'success': True}
         self.verify_super_admin(request)
         data = request.get_json()
         user = security_manager.find_user(data['email'])
         is_coach = data['is_coach']
-        if user is None:
-            user = self.add_user(data)
+        if user is None and is_coach:
+            password = ''.join(random.sample(string.ascii_lowercase, 10))
+            response['password'] = password
+            response['username'] = data['email']
+            user = self.add_user(data, password)
         sql_lab_role = security_manager.find_role('sql_lab')
         project_role = security_manager.find_role(data['project_name'])
         gamma_role = security_manager.find_role('Gamma')
@@ -48,16 +55,16 @@ class Clipwise(BaseSupersetView):
             user.roles.append(sql_lab_role)
         if project_role not in user.roles and is_coach:
             user.roles.append(project_role)
-        if not is_coach:
+        if not is_coach and project_role in user.roles:
             user.roles.remove(project_role)
 
         security_manager.update_user(user)
-        return self.json_response({"message": "Done"})
+        return self.json_response(response)
 
     @staticmethod
-    def add_user(data):
+    def add_user(data, password):
         return security_manager.add_user(data['email'], data['first_name'], data['last_name'], data['email'],
-                                         security_manager.find_role("Gamma"), data['password'])
+                                         security_manager.find_role("Gamma"), password)
 
     @staticmethod
     def add_database(uri, name):
